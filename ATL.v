@@ -27,9 +27,9 @@ Record CGS : Set := mkRat
 
 (* TODO: consider limiting coalitions to lp. *)
 
-Definition succ {g:CGS} (q q':State) := exists mv:@move_vec g.(m) q, q'=g.(d) q mv.
+Definition succ (g:CGS) (q q':State) := exists mv:@move_vec g.(m) q, q'=g.(d) q mv.
 
-Fixpoint computation_property_fix {g:CGS} (l:list State) : Prop :=
+Fixpoint computation_property_fix (g:CGS) (l:list State) : Prop :=
   match l with
   | nil => False
   | x::l' => match hd_error l' with
@@ -38,13 +38,13 @@ Fixpoint computation_property_fix {g:CGS} (l:list State) : Prop :=
              end
   end.
 
-Definition computation_property {g:CGS} (q:State) (l:list State) : Prop :=
+Definition computation_property (g:CGS) (q:State) (l:list State) : Prop :=
   (hd_error l) = Some q /\ @computation_property_fix g l.
 
-Definition computation {g:CGS} (q:State) : Set := {l:list State | @computation_property g q l}.
+Definition computation (g:CGS) (q:State) : Set := {l:list State | @computation_property g q l}.
 
 Theorem computation_property_suffix :
-  forall {g:CGS} (l:list State) (q a b:State),
+  forall (g:CGS) (l:list State) (q a b:State),
     @computation_property g q (b::l) /\ @succ g a b -> @computation_property g a (a::b::l).
 Proof.
   intros. destruct H. destruct H. unfold computation_property. split.
@@ -79,7 +79,7 @@ Theorem hd_error_app : forall (b0 b1: list State) (a:State), hd_error b0 = Some 
 Qed.
 
 Theorem computation_property_app :
-  forall {g:CGS} (q:State) (l0 l1: list State),
+  forall (g:CGS) (q:State) (l0 l1: list State),
     (1 <= (length l0)) -> @computation_property g q (l0 ++ l1) -> @computation_property g q l0.
 Proof.
   intros. destruct H0. unfold computation_property. generalize dependent q. induction l0.
@@ -107,7 +107,7 @@ Qed.
 
   
 Theorem computation_property_prefix :
-  forall {g:CGS} (n:nat) (q:State) (l:@computation g q),
+  forall (g:CGS) (n:nat) (q:State) (l:@computation g q),
     @computation_property g q (firstn (S n) (proj1_sig l)).
 Proof.
   intros. destruct l. unfold proj1_sig. destruct c.
@@ -143,32 +143,32 @@ Proof.
 Qed.
     
 Definition computation_prefix
-           {g:CGS}
+           (g:CGS)
            (q:State)
-           (l: computation q)
+           (l: computation g q)
            (n:nat)
-           : computation q
+           : computation g q
 :=
   @exist (list State)
-         (fun l => @computation_property g q l)
+         (fun l => computation_property g q l)
          (firstn (S n) (proj1_sig l))
-         (@computation_property_prefix g n q l).
+         (computation_property_prefix g n q l).
 
 Check computation_prefix.
 
-Definition strategy {g:CGS} (p:Player) : Type := forall (q:State) (l:@computation g q), (@move g.(m) (last (proj1_sig l) q) p).
+Definition strategy (g:CGS) (p:Player) : Type := forall (q:State) (l:computation g q), (@move g.(m) (last (proj1_sig l) q) p).
 
 Definition coalition : Type := Player -> Prop.
 
-Definition strategy_set {g:CGS} (c:coalition) : Type := forall (p:Player), c p -> @strategy g p.
+Definition strategy_set (g:CGS) (c:coalition) : Type := forall (p:Player), c p -> @strategy g p.
 
-Definition outcomes {g:CGS} (q:State) (c:coalition) (ss:strategy_set c) (l: computation q)
+Definition outcomes (g:CGS) (q:State) (c:coalition) (ss:strategy_set g c) (l: computation g q)
 :=
   forall (i:nat)
          (p:Player)
          (H: c p)
-         (m:move_vec (last (proj1_sig (computation_prefix q l i)) q)),
-    let x := computation_prefix q l i in
+         (m:move_vec (last (proj1_sig (computation_prefix g q l i)) q)),
+    let x := computation_prefix g q l i in
     m p = ss p H q x
     -> g.(d) (last (proj1_sig x) q) m = (last (proj1_sig x) q).
 
@@ -190,46 +190,80 @@ Notation "<< c >>o p" := (possible_next c p) (at level 50).
 Notation "<< c >>^ p" := (possible_once c  p) (at level 50).
 Notation "<< c >># p" := (possible_always c p) (at level 50).
 Notation "<< c >> p %% q" := (possible_until c p q) (at level 50).
-Notation "[[ c ]]o p" := (lnot (possible_next c (lnot p))) (at level 50).
-Notation "[[ c ]]<> p" := (lnot (possible_always c (lnot p))) (at level 50).
-Notation "[[ c ]]# p" := (lnot (possible_always c (lnot p))) (at level 50).
-Notation "[[ c ]] p %% q" := (lnot (possible_until c p (lnot q))) (at level 50).
+Notation "[[ c ]]o p" := (possible_next (fun p0:Player => ~(c p0)) p) (at level 50).
+Notation "[[ c ]]^ p" := (possible_once (fun p0:Player => ~(c p0)) p) (at level 50).
+Notation "[[ c ]]# p" := (possible_always (fun p0:Player => ~(c p0)) p) (at level 50).
+Notation "[[ c ]] p %% q" := (possible_until (fun p0:Player => ~(c p0)) p  q) (at level 50).
 
-Check forall (q:State) (c: coalition),
-    exists (ss:strategy_set c),
-      forall (l:computation q),
-        outcomes q c ss l.
+Check forall  (g:CGS) (q:State) (c: coalition),
+    exists (ss:strategy_set g c),
+      forall (l:computation g q),
+        outcomes g q c ss l.
 
-Fixpoint verifies {g:CGS} (q:State) (phi:sentence) :Prop :=
+Fixpoint verifies (g:CGS) (q:State) (phi:sentence) :Prop :=
   match phi with
   | obs a => g.(o) q = a
-  | !! a => ~ (@verifies g q a)
-  | a //\\ b => (@verifies g q a) /\ (@verifies g q b)
-  | <<c>>o a => exists (ss:strategy_set c),
-                forall (l:computation q),
-                  @outcomes g q c ss l
-                  /\ (@verifies g (nth 1 (proj1_sig l) q) a)
-  | <<c>>^ a => exists (ss:strategy_set c),
-                forall (l:computation q),
-                  @outcomes g q c ss l
+  | !! a => ~ (verifies g q a)
+  | a //\\ b => (verifies g q a) /\ (verifies g q b)
+  | <<c>>o a => exists (ss:strategy_set g c),
+                forall (l:computation g q),
+                  outcomes g q c ss l
+                  /\ (verifies g (nth 1 (proj1_sig l) q) a)
+  | <<c>>^ a => exists (ss:strategy_set g c),
+                forall (l:computation g q),
+                  outcomes g q c ss l
                   /\ exists (n:nat),
-                    (@verifies g (nth n (proj1_sig l) q) a)
-  | <<c>># a => exists (ss:strategy_set c),
-                forall (l:computation q) (n:nat),
-                  @outcomes g q c ss l
-                  /\ (@verifies g (nth n (proj1_sig l) q) a)
-  | <<c>> a %% b => exists (ss:strategy_set c) (n:nat),
-                  forall (l:computation q),
-                    @outcomes g q c ss l
-                    /\ (@verifies g (nth n (proj1_sig l) q) b)
+                    (verifies g (nth n (proj1_sig l) q) a)
+  | <<c>># a => exists (ss:strategy_set g c),
+                forall (l:computation g q) (n:nat),
+                  outcomes g q c ss l
+                  /\ (verifies g (nth n (proj1_sig l) q) a)
+  | <<c>> a %% b => exists (ss:strategy_set g c) (n:nat),
+                  forall (l:computation g q),
+                    outcomes g q c ss l
+                    /\ (verifies g (nth n (proj1_sig l) q) b)
                     /\ forall (m:nat),
-                        m < n -> (@verifies g (nth m (proj1_sig l) q) a)
+                        m < n -> (verifies g (nth m (proj1_sig l) q) a)
   end.
 
 Definition invariant (g1 g2:CGS) : Prop := forall (phi:sentence) (q:State),
-    @verifies g1 q phi <-> @verifies g2 q phi.
+    verifies g1 q phi <-> verifies g2 q phi.
     
 (* TODO: invariance. *)
 (* TODO: proof calculus *)
 
 Definition spec : Type := sentence -> Prop.
+
+Definition g_in_spec (sp:spec) (g:CGS) (q:State) : Prop := forall (phi:sentence), sp phi -> verifies g q phi.
+
+Theorem coalition_complement_once : forall (g:CGS) (q:State) (phi:sentence) (c:coalition),
+    verifies g q (<<c>>^ phi) <-> verifies g q (lnot ([[c]]^ (lnot phi))).
+Proof.
+  intros g q phi. assert (F: forall (c:coalition), verifies g q (<<c>>^ phi) -> verifies g q (lnot ([[c]]^ (lnot phi)))).
+  {
+    intros. simpl. simpl in H. unfold not. intros.
+    destruct H, H0. assert (P: (computation_property g q (q::nil))).
+    {
+      unfold computation_property. split.
+      - reflexivity.
+      - reflexivity.
+    }
+    pose ((@exist (list State) (fun l => computation_property g q l) (q::nil) P): computation g q).
+    destruct (H c0). destruct H2. simpl in H2. 
+    destruct (H0 c0). destruct H4. simpl in H4.
+    destruct x1, x2.
+    - apply H4 in H2. apply H2.
+    - destruct x2.
+      + apply H4 in H2. apply H2.
+      + apply H4 in H2. apply H2.
+    - destruct x1.
+      + apply H4 in H2. apply H2.
+      + apply H4 in H2. apply H2.
+    - destruct x1, x2.
+      + apply H4 in H2. apply H2.
+      + apply H4 in H2. apply H2.
+      + apply H4 in H2. apply H2.
+      + apply H4 in H2. apply H2.
+  }
+  assert (B: forall c:coalition, verifies g q (lnot ([[c]]^ (lnot phi))) -> verifies g q (<<c>>^ phi)).
+Admitted.
