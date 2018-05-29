@@ -1,6 +1,6 @@
 (* Alternating-Time Temporal Logic *)
 Require Export List.
-
+Require Export Decidable.
 Parameter State : Set.
 Parameter Player : Set.
 Parameter Observable : Set.
@@ -162,28 +162,32 @@ Definition strategy (g:CGS) (p:Player) : Set := forall (q:State) (l:computation 
 
 Definition strat_zero (g:CGS) (p:Player) : strategy g p := fun (q:State) => fun (l:computation g q) => 0.
 
-Definition coalition : Type := list Player.
+Definition coalition : Type := Player -> Prop.
 
-Definition grand (g:CGS) : coalition := g.(lp).
-Definition nobody : coalition := nil.
-Definition coal_comp (g:CGS) (c:coalition) : coalition :=
-  let x := fix fx (y z:coalition)
-             := match y with
-                | nil => z
-                | a::y' => if existsb (beq_player a) c then fx y' z else fx y' (a::z)
-                end
-  in x g.(lp) nil.
+Definition coal_comp (c:coalition) : coalition := fun p:Player => ~ (c p).
 
-Definition coal_union (c1 c2 : coalition) : coalition := c1 ++ c2.
+(* Definition grand (g:CGS) : coalition := g.(lp). *)
+(* Definition nobody : coalition := nil. *)
+(* Definition coal_comp (g:CGS) (c:coalition) : coalition := *)
+(*   let x := fix fx (y z:coalition) *)
+(*              := match y with *)
+(*                 | nil => z *)
+(*                 | a::y' => if existsb (beq_player a) c then fx y' z else fx y' (a::z) *)
+(*                 end *)
+(*   in x g.(lp) nil. *)
+
+(* Definition coal_union (c1 c2 : coalition) : coalition := c1 ++ c2. *)
+
+(*
 Definition coal_intersection (c1 c2: coalition) : coalition :=
   let x := fix fx (y1 y2 z: coalition)
-
+*)
 
 Definition strategy_set (g:CGS) (c:coalition) : Set := forall (p:Player), c p -> @strategy g p.
 
 Definition ss_zero (g:CGS) (c:coalition) : strategy_set g c := fun (p:Player) => fun (H: (c p)) => strat_zero g p.
 
-Definition outcomes (g:CGS) (q:State) (c:coalition) (ss:strategy_set g c) (l: computation g q)
+Definition outcomes (g:CGS) (q:State) (c:coalition) (ss:strategy_set g c) (l: computation g q) : Prop
 :=
   forall (i:nat)
          (p:Player)
@@ -198,6 +202,7 @@ Inductive sentence : Type :=
 | obs : Observable -> sentence
 | lnot : sentence -> sentence
 | land : sentence -> sentence -> sentence
+| lor : sentence -> sentence -> sentence
 | possible_next : coalition -> sentence -> sentence
 | possible_once : coalition -> sentence -> sentence
 | possible_always : coalition -> sentence -> sentence
@@ -221,34 +226,67 @@ Check forall  (g:CGS) (q:State) (c: coalition),
       forall (l:computation g q),
         outcomes g q c ss l.
 
-Fixpoint verifies (g:CGS) (q:State) (phi:sentence) :Prop :=
-  match phi with
-  | obs a => g.(o) q = a
-  | !! a => ~ (verifies g q a)
-  | a //\\ b => (verifies g q a) /\ (verifies g q b)
-  | <<c>>o a => exists (ss:strategy_set g c),
-                forall (l:computation g q),
-                  outcomes g q c ss l
-                  /\ (verifies g (nth 1 (proj1_sig l) q) a)
-  | <<c>>^ a => exists (ss:strategy_set g c),
-                forall (l:computation g q),
-                  outcomes g q c ss l
-                  /\ exists (n:nat),
-                    (verifies g (nth n (proj1_sig l) q) a)
-  | <<c>># a => exists (ss:strategy_set g c),
-                forall (l:computation g q) (n:nat),
-                  outcomes g q c ss l
-                  /\ (verifies g (nth n (proj1_sig l) q) a)
-  | <<c>> a %% b => exists (ss:strategy_set g c) (n:nat),
-                  forall (l:computation g q),
-                    outcomes g q c ss l
-                    /\ (verifies g (nth n (proj1_sig l) q) b)
-                    /\ forall (m:nat),
-                        m < n -> (verifies g (nth m (proj1_sig l) q) a)
-  end.
+
+Inductive verifiesI: CGS -> State -> sentence -> Prop :=
+| verifiesObs: forall (g: CGS) (q: State) (a: Observable),
+    g.(o) q = a -> verifiesI g q (obs a)
+| verifiesNot: forall (g: CGS) (q: State) (phi: sentence),
+    ~(verifiesI g q phi) ->
+    verifiesI g q (!! phi)
+| verifiesAnd: forall (g: CGS) (q: State) (phi1 phi2: sentence),
+    verifiesI g q phi1 ->
+    verifiesI g q phi2 ->
+    verifiesI g q (phi1 //\\ phi2)
+| verifiesPossibleNext: forall (g: CGS) (q: State) (phi: sentence) (c:coalition),
+    (exists (ss:strategy_set g c),
+      forall (l:computation g q),
+        outcomes g q c ss l ->
+        verifiesI g (nth 1 (proj1_sig l) q) phi) ->
+    verifiesI g q (<<c>>o phi)
+| verifiesPossibleOnce: forall (g: CGS) (q: State) (phi: sentence) (c:coalition),
+    (exists (ss:strategy_set g c),
+        forall (l:computation g q),
+          outcomes g q c ss l ->
+          (exists n:nat, verifiesI g (nth n (proj1_sig l) q) phi)) ->
+    verifiesI g q (<<c>>^ phi)
+| verifiesPossibleAlways: forall (g: CGS) (q: State) (phi: sentence) (c:coalition),
+    (exists (ss:strategy_set g c),
+        forall (l:computation g q),
+          outcomes g q c ss l ->
+          (forall n:nat, verifiesI g (nth n (proj1_sig l) q) phi)) ->
+    verifiesI g q (<<c>>^ phi).
+ 
+
+    
+    
+(* Fixpoint verifies (g:CGS) (q:State) (phi:sentence) :Prop := *)
+(*   match phi with *)
+(*   | obs a => g.(o) q = a *)
+(*   | !! a => ~ (verifies g q a) *)
+(*   | a //\\ b => (verifies g q a) /\ (verifies g q b) *)
+(*   | <<c>>o a => exists (ss:strategy_set g c), *)
+(*                 forall (l:computation g q), *)
+(*                   outcomes g q c ss l *)
+(*                   /\ (verifies g (nth 1 (proj1_sig l) q) a) *)
+(*   | <<c>>^ a => exists (ss:strategy_set g c), *)
+(*                 forall (l:computation g q), *)
+(*                   outcomes g q c ss l *)
+(*                   /\ exists (n:nat), *)
+(*                     (verifies g (nth n (proj1_sig l) q) a) *)
+(*   | <<c>># a => exists (ss:strategy_set g c), *)
+(*                 forall (l:computation g q) (n:nat), *)
+(*                   outcomes g q c ss l *)
+(*                   /\ (verifies g (nth n (proj1_sig l) q) a) *)
+(*   | <<c>> a %% b => exists (ss:strategy_set g c) (n:nat), *)
+(*                   forall (l:computation g q), *)
+(*                     outcomes g q c ss l *)
+(*                     /\ (verifies g (nth n (proj1_sig l) q) b) *)
+(*                     /\ forall (m:nat), *)
+(*                         m < n -> (verifies g (nth m (proj1_sig l) q) a) *)
+(*   end. *)
 
 Definition invariant (g1 g2:CGS) : Prop := forall (phi:sentence) (q:State),
-    verifies g1 q phi <-> verifies g2 q phi.
+    verifiesI g1 q phi <-> verifiesI g2 q phi.
     
 (* TODO: invariance. *)
 (* TODO: proof calculus *)
@@ -261,10 +299,11 @@ Definition g_in_spec (sp:spec) (g:CGS) (q:State) : Prop := forall (phi:sentence)
 Axiom dne : forall (phi:sentence), !! (!! phi) = phi.
 Axiom dcomp : forall (c:coalition), coal_comp (coal_comp c) = c.
 
+
 Theorem coalition_complement_once : forall (g:CGS) (q:State) (phi:sentence) (c:coalition),
-    verifies g q (<<c>>^ phi) <-> verifies g q (!! ([[c]]^ (!! phi))).
+    verifies g q (<<c>>^ phi) <-> verifies g q (!! ([[c]]# (!! phi))).
 Proof.
-  intros g q. assert (F: forall (c:coalition) (phi:sentence), verifies g q (<<c>>^ phi) -> verifies g q (!! ([[c]]^ (!! phi)))).
+  intros g q. assert (F: forall (c:coalition) (phi:sentence), verifies g q (<<c>>^ phi) -> verifies g q (!! ([[c]]# (!! phi)))).
   {
     intros. simpl. simpl in H. unfold not. intros.
     destruct H, H0. assert (P: (computation_property g q (q::nil))).
