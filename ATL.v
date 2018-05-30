@@ -159,7 +159,11 @@ Definition computation_prefix
 
 Check computation_prefix.
 
+Variable nothing: Move.
+Axiom nothing_does_nothing : forall (g:CGS) (q:State), g.(d) q (fun _ => nothing) = q.
+
 Definition strategy (g:CGS) (p:Player) : Set := forall (q:State) (l:computation g q), Move.
+Definition strat_nothing (g: CGS) (p:Player) : strategy g p := fun _ _ => nothing.
 
 Definition coalition : Type := Player -> bool.
 
@@ -183,6 +187,8 @@ Definition coal_intersection (c1 c2: coalition) : coalition :=
 *)
 
 Definition strategy_set (g:CGS) (c:coalition) : Set := forall (p:Player), c p = true -> strategy g p.
+
+Definition ss_nothing (g:CGS) (c:coalition) : strategy_set g c := fun p _ => strat_nothing g p.
 
 Definition outcomes (g:CGS) (q:State) (c:coalition) (ss:strategy_set g c) (l: computation g q) : Prop
 :=
@@ -225,36 +231,36 @@ Check forall  (g:CGS) (q:State) (c: coalition),
       forall (l:computation g q),
         outcomes g q c ss l.
 
-Variable not_helper : CGS -> State -> sentence -> Prop.
+(* Variable not_helper : CGS -> State -> sentence -> Prop. *)
 
-Inductive verifiesI: CGS -> State -> sentence -> Prop :=
-| verifiesObs: forall (g: CGS) (q: State) (a: Observable),
-    g.(o) q = a -> verifiesI g q (obs a)
-| verifiesNot: forall (g: CGS) (q: State) (phi: sentence),
-    ~ not_helper g q phi ->
-    verifiesI g q (!! phi)
-| verifiesAnd: forall (g: CGS) (q: State) (phi1 phi2: sentence),
-    verifiesI g q phi1 ->
-    verifiesI g q phi2 ->
-    verifiesI g q (phi1 //\\ phi2)
-| verifiesPossibleNext: forall (g: CGS) (q: State) (phi: sentence) (c:coalition),
-    (exists (ss:strategy_set g c),
-      forall (l:computation g q),
-        outcomes g q c ss l ->
-        verifiesI g (nth 1 (proj1_sig l) q) phi) ->
-    verifiesI g q (<<c>>o phi)
-| verifiesPossibleOnce: forall (g: CGS) (q: State) (phi: sentence) (c:coalition),
-    (exists (ss:strategy_set g c),
-        forall (l:computation g q),
-          outcomes g q c ss l ->
-          (exists n:nat, verifiesI g (nth n (proj1_sig l) q) phi)) ->
-    verifiesI g q (<<c>>^ phi)
-| verifiesPossibleAlways: forall (g: CGS) (q: State) (phi: sentence) (c:coalition),
-    (exists (ss:strategy_set g c),
-        forall (l:computation g q),
-          outcomes g q c ss l ->
-          (forall n:nat, verifiesI g (nth n (proj1_sig l) q) phi)) ->
-    verifiesI g q (<<c>>^ phi).
+(* Inductive verifiesI: CGS -> State -> sentence -> Prop := *)
+(* | verifiesObs: forall (g: CGS) (q: State) (a: Observable), *)
+(*     g.(o) q = a -> verifiesI g q (obs a) *)
+(* | verifiesNot: forall (g: CGS) (q: State) (phi: sentence), *)
+(*     ~ not_helper g q phi -> *)
+(*     verifiesI g q (!! phi) *)
+(* | verifiesAnd: forall (g: CGS) (q: State) (phi1 phi2: sentence), *)
+(*     verifiesI g q phi1 -> *)
+(*     verifiesI g q phi2 -> *)
+(*     verifiesI g q (phi1 //\\ phi2) *)
+(* | verifiesPossibleNext: forall (g: CGS) (q: State) (phi: sentence) (c:coalition), *)
+(*     (exists (ss:strategy_set g c), *)
+(*       forall (l:computation g q), *)
+(*         outcomes g q c ss l -> *)
+(*         verifiesI g (nth 1 (proj1_sig l) q) phi) -> *)
+(*     verifiesI g q (<<c>>o phi) *)
+(* | verifiesPossibleOnce: forall (g: CGS) (q: State) (phi: sentence) (c:coalition), *)
+(*     (exists (ss:strategy_set g c), *)
+(*         forall (l:computation g q), *)
+(*           outcomes g q c ss l -> *)
+(*           (exists n:nat, verifiesI g (nth n (proj1_sig l) q) phi)) -> *)
+(*     verifiesI g q (<<c>>^ phi) *)
+(* | verifiesPossibleAlways: forall (g: CGS) (q: State) (phi: sentence) (c:coalition), *)
+(*     (exists (ss:strategy_set g c), *)
+(*         forall (l:computation g q), *)
+(*           outcomes g q c ss l -> *)
+(*           (forall n:nat, verifiesI g (nth n (proj1_sig l) q) phi)) -> *)
+(*     verifiesI g q (<<c>>^ phi). *)
  
 
     
@@ -265,24 +271,26 @@ Fixpoint verifies (g:CGS) (q:State) (phi:sentence) :Prop :=
   | !! a => ~ (verifies g q a)
   | a //\\ b => (verifies g q a) /\ (verifies g q b)
   | a \\// b => (verifies g q a) \/ (verifies g q b)
-  | <<c>>o a => forall (l:computation g q),
-      exists (ss:strategy_set g c),
-        outcomes g q c ss l ->
-        (verifies g (nth 1 (proj1_sig l) q) a)
-  | <<c>>^ a => forall (l:computation g q),
-      exists (n:nat) (ss:strategy_set g c),
-        outcomes g q c ss l ->
-        (verifies g (nth n (proj1_sig l) q) a)
-  | <<c>># a => forall (l:computation g q) (n:nat),
-      exists (ss:strategy_set g c),
-        outcomes g q c ss l ->
-        (verifies g (nth n (proj1_sig l) q) a)
-  | <<c>> a %% b => forall (l:computation g q),
-      exists (n:nat) (ss:strategy_set g c),
-        outcomes g q c ss l ->
-        ((verifies g (nth n (proj1_sig l) q) b)
-        /\ forall (m:nat),
-            m < n -> (verifies g (nth m (proj1_sig l) q) a))
+  | <<c>>o a => exists (ss:strategy_set g c),
+                forall (l:computation g q),
+                  outcomes g q c ss l ->
+                  (verifies g (nth 1 (proj1_sig l) q) a)
+  | <<c>>^ a => exists (ss:strategy_set g c),
+                forall (l:computation g q),
+                  outcomes g q c ss l ->
+                  exists (n:nat),
+                    (verifies g (nth n (proj1_sig l) q) a)
+  | <<c>># a => exists (ss:strategy_set g c),
+                forall (l:computation g q) (n:nat),
+                  outcomes g q c ss l ->
+                  (verifies g (nth n (proj1_sig l) q) a)
+  | <<c>> a %% b => exists (ss:strategy_set g c),
+                    forall (l:computation g q),
+                      outcomes g q c ss l ->
+                      exists (n:nat),
+                        ((verifies g (nth n (proj1_sig l) q) b)
+                         /\ forall (m:nat),
+                            m < n -> (verifies g (nth m (proj1_sig l) q) a))
   end.
 
 Definition invariant (g1 g2:CGS) : Prop := forall (phi:sentence) (q:State),
@@ -313,11 +321,12 @@ Axiom d_sentence : forall (g:CGS) (q:State) (phi:sentence), decidable (verifies 
 Theorem coalition_complement_once_always : forall (g:CGS) (q:State) (phi:sentence) (c:coalition),
     verifies g q  (<<c>>^ phi) <-> verifies g q (!! ([[c]]# (!! phi))).
 Proof.
-  intros g q.
-  assert (F: forall c phi, verifies g q (<<c>>^ phi) -> verifies g q (!! ([[c]]# ( !! phi)))).
+  intros.
+  assert (F:verifies g q  (<<c>>^ phi) -> verifies g q (!! ([[c]]# (!! phi)))).
   { simpl. intros.
+    apply all_not_not_ex.
+    intros.
     apply ex_not_not_all.
-    
     assert (P: computation_property g q (q::nil)).
     {
       unfold computation_property. split. 
@@ -327,21 +336,14 @@ Proof.
     pose (l := (exist (computation_property g q) (q::nil) P) : (computation g q)).
     exists l.
     apply ex_not_not_all.
-    exists 0.
-    apply all_not_not_ex.
-    unfold not. intros.
-    apply H0.
-    unfold outcomes. intros. simpl in H3. destruct i.
-    + simpl in H3. inversion H3. inversion H5.
-    + inversion H3. inversion H5.
-    + simpl. destruct (H l). induction x.
-      * destruct H1. apply H1. unfold outcomes. intros. inversion H4. inversion H6.
-      * apply IHx. destruct H1. exists x0. intros. apply H1 in H2.
-        assert (proj1_sig l = (q::nil)).
-        {
-          unfold proj1_sig. unfold l. reflexivity.
-        }
-        assert (forall m:nat, nth (S m) (proj1_sig l) q = nth m (proj1_sig l) q).
+    exists 0. unfold not. intros. apply H0.
+    - 
+      unfold outcomes. intros. inversion H3. inversion H5.
+    - destruct H, (H l).
+      unfold outcomes. intros. inversion H3. inversion H5.
+      induction x0.
+      * apply H1.
+      * assert (forall m:nat, nth (S m) (proj1_sig l) q = nth m (proj1_sig l) q).
         {
           intros. induction m.
           - reflexivity.
@@ -351,17 +353,13 @@ Proof.
               - reflexivity.
               - apply le_S. apply IHm0.
             }
-            apply H4.
+            apply H2.
         }
-        rewrite H4 in H2. apply H2.
+        rewrite H2 in H1. apply IHx0 in H1. apply H1.
   }
-  Admitted.
-  (* assert (B: forall c phi, verifies g q (!! ([[c]]# (!! phi))) -> verifies g q (<<c>>^ phi)). *)
-  (* { *)
-  (*   simpl. intros. *)
-  (*   apply not_all_ex_not in H. destruct H. *)
-  (*   apply not_all_ex_not in H. destruct H. *)
-  (*   unfold not in H. *)
-  (*   exists x0.  *)
+  assert (B : verifies g q (!! ([[c]]# (!! phi))) -> verifies g q  (<<c>>^ phi)).
+  {
+    simpl. intros.
+    Admitted.        
   (* } *)
 
