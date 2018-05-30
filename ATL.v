@@ -15,14 +15,17 @@ Definition move_vec (q: State) := forall (p:Player), Move.
 
 Definition observation := State -> Observable.
 
+Definition move_function := forall (q:State), move_vec q.
+
 Definition delta := forall (q:State), move_vec q -> State.
 
 Record CGS : Set := mkRat
                       {
                         size: nat;
                         lp:list Player;
+                        mf:move_function;
                         o:observation;
-                        d:@delta
+                        d:delta
                        }.
 
 (* TODO: consider limiting coalitions to lp. *)
@@ -352,11 +355,13 @@ Proof.
         }
         rewrite H4 in H2. apply H2.
   }
-  assert (B: forall c phi, verifies g q (!! ([[c]]# (!! phi))) -> verifies g q (<<c>>^ phi)).
-  {
-    simpl. intros.
-    apply not_all_ex_not in H. destruct H.
-    apply not_all_ex_not in H. destruct H.
-    unfold not in H.
-    exists x0. 
-  }
+  Admitted.
+  (* assert (B: forall c phi, verifies g q (!! ([[c]]# (!! phi))) -> verifies g q (<<c>>^ phi)). *)
+  (* { *)
+  (*   simpl. intros. *)
+  (*   apply not_all_ex_not in H. destruct H. *)
+  (*   apply not_all_ex_not in H. destruct H. *)
+  (*   unfold not in H. *)
+  (*   exists x0.  *)
+  (* } *)
+
