@@ -6,49 +6,63 @@ Require Export FunctionalExtensionality.
 
 Parameter State : Set.
 Parameter Player : Set.
-Parameter Observable : Set.
-Parameter Move : Set.
+Parameter Observable : Set.     (* set of atomic truths that can hold at a given state. *)
+Parameter Move : Set.           (* alphabet of moves individual players can make. *)
 Parameter beq_player : Player -> Player -> bool.
 
-
+(* type corresponding to the set of moves each player makes. *)
 Definition move_vec (q: State) := forall (p:Player), Move.
 
+(* AHK says not all moves are available at all states. We express this using a function type [enabled], expressing which moves are available at which state.  *)
+Definition enabled := State -> Player -> Move -> bool.
+
+(* labeling function type. *)
 Definition observation := State -> Observable.
 
-Definition move_function := forall (q:State), move_vec q.
-
+(* transition function. *)
 Definition delta := forall (q:State), move_vec q -> State.
 
 Record CGS : Set := mkRat
                       {
                         size: nat;
                         lp:list Player;
-                        mf:move_function;
+                        e:enabled;
                         o:observation;
                         d:delta
                        }.
 
 (* TODO: consider limiting coalitions to lp. *)
 
-Definition succ (g:CGS) (q q':State) := exists mv:move_vec q, q'=g.(d) q mv.
+(* property of states [q] and [q'], expressind whether [q'] can be reached from [q] in game [g], under [g]'s transition function.*)
+Definition succ (g:CGS) (q q':State) :=
+  exists mv:move_vec q,
+    (forall (p:Player),
+        (g.(e) q p (mv p)) = true) /\
+    q'=g.(d) q mv.
 
+(* Computations are nonempty sequences of states [l] where every [l_(i+1)] is a successor of [l_i]. *)
+
+(* [computation_property_fix] checks that successive states are successors according to the above property. *)
 Fixpoint computation_property_fix (g:CGS) (l:list State) : Prop :=
   match l with
   | nil => False
   | x::l' => match hd_error l' with
              | None => True
-             | Some y => @succ g x y /\ @computation_property_fix g l'
+             | Some y => succ g x y /\ computation_property_fix g l'
              end
   end.
 
+(* A q-computation starts with state [q]. [computation_property] checks for this, and for [computation_property_fix] to hold.*)
 Definition computation_property (g:CGS) (q:State) (l:list State) : Prop :=
-  (hd_error l) = Some q /\ @computation_property_fix g l.
+  (hd_error l) = Some q /\ computation_property_fix g l.
 
+(* Subset type of [list State] where [computation_property] holds. *)
 Definition computation (g:CGS) (q:State) : Set := {l:list State | @computation_property g q l}.
 
+(* If a [list State] is a [q]-computation, that same [list State] cons'ed with State [a] is an [a]-computation. *)
 Theorem computation_property_suffix :
   forall (g:CGS) (l:list State) (q a b:State),
-    @computation_property g q (b::l) /\ @succ g a b -> @computation_property g a (a::b::l).
+    computation_property g q (b::l) /\ succ g a b -> computation_property g a (a::b::l).
 Proof.
   intros. destruct H. destruct H. unfold computation_property. split.
   - reflexivity.
@@ -57,6 +71,7 @@ Proof.
     + simpl in H1. apply H1.
 Qed.
 
+(* A list has length > 0 iff there exists a head to the list.*)
 Theorem  length_hd_error : forall (A:Type) (l:list A), 1 <= length l <-> exists y:A, hd_error l = Some y.
 Proof.
 intros. split.
@@ -73,6 +88,7 @@ intros. split.
   + apply le_S. apply IHn.
 Qed.
 
+(* The head of a list [b0++b1] is the head of list [b0] if [b0] is nonempty.*)
 Theorem hd_error_app : forall (b0 b1: list State) (a:State), hd_error b0 = Some a -> (hd_error (b0 ++ b1)) = Some a.
   {
     intros. induction b0.
@@ -81,9 +97,10 @@ Theorem hd_error_app : forall (b0 b1: list State) (a:State), hd_error b0 = Some 
   }
 Qed.
 
+(* If [computation_property] holds for [l0++l1] and [l0] is nonempty, [computation_property] holds for [l0]. *)
 Theorem computation_property_app :
   forall (g:CGS) (q:State) (l0 l1: list State),
-    (1 <= (length l0)) -> @computation_property g q (l0 ++ l1) -> @computation_property g q l0.
+    (1 <= (length l0)) -> computation_property g q (l0 ++ l1) -> computation_property g q l0.
 Proof.
   intros. destruct H0. unfold computation_property. generalize dependent q. induction l0.
   - intros. inversion H.
@@ -108,10 +125,10 @@ Proof.
         -- apply H6.
 Qed.
 
-  
+(* The nonempty prefix of a [q]-computation is a [q]-computation. *)
 Theorem computation_property_prefix :
-  forall (g:CGS) (n:nat) (q:State) (l:@computation g q),
-    @computation_property g q (firstn (S n) (proj1_sig l)).
+  forall (g:CGS) (n:nat) (q:State) (l:computation g q),
+    computation_property g q (firstn (S n) (proj1_sig l)).
 Proof.
   intros. destruct l. unfold proj1_sig. destruct c.
   pose proof (hd_error_app (firstn (S n) x) (skipn (S n) x) q) as H1.
@@ -144,7 +161,8 @@ Proof.
   rewrite firstn_skipn in H6.
   apply (H6 H7 H8).
 Qed.
-    
+
+(* A function generating the [n+1]-long prefix of a [q]-computation.*)
 Definition computation_prefix
            (g:CGS)
            (q:State)
@@ -159,14 +177,20 @@ Definition computation_prefix
 
 Check computation_prefix.
 
-Variable nothing: Move.
-Axiom nothing_does_nothing : forall (g:CGS) (q:State), g.(d) q (fun _ => nothing) = q.
 
+(* There is always a move available called [nothing], which if performed by every player fails to change state. *)
+Parameter nothing: Move.
+Parameter nothing_does_nothing : forall (g:CGS) (q:State), g.(d) q (fun _ => nothing) = q.
+
+
+(* A strategy is a function from computations to moves, representing what a player would do in a particular play-through. *)
 Definition strategy (g:CGS) (p:Player) : Set := forall (q:State) (l:computation g q), Move.
 Definition strat_nothing (g: CGS) (p:Player) : strategy g p := fun _ _ => nothing.
 
-Definition coalition : Type := Player -> bool.
+(* A coalition is a set of players. *)
+Definition coalition : Set := Player -> bool.
 
+(* Coalition complement. *)
 Definition coal_comp (c:coalition) : coalition := fun p:Player => negb (c p).
 
 (* Definition grand (g:CGS) : coalition := g.(lp). *)
@@ -186,10 +210,19 @@ Definition coal_intersection (c1 c2: coalition) : coalition :=
   let x := fix fx (y1 y2 z: coalition)
 *)
 
+(* [strategy_set] is a type representing unique strategies only of members in the coalition. *)
 Definition strategy_set (g:CGS) (c:coalition) : Set := forall (p:Player), c p = true -> strategy g p.
 
+(* Whether a particular move vector obeys a given strategy set. *)
+Definition strategy_set_enabled (g:CGS) (c:coalition) (ss:strategy_set g c) (q:State) (l:computation g q) (mv:move_vec q) :=
+  forall (p:Player) (H:c p = true),
+    mv p = ss p H q l.
+  
+(* Strategy set where members of the coalition do nothing. *)
 Definition ss_nothing (g:CGS) (c:coalition) : strategy_set g c := fun p _ => strat_nothing g p.
 
+
+(* Property checking whether a given computation obeys a strategy set in all successive states. *)
 Definition outcomes (g:CGS) (q:State) (c:coalition) (ss:strategy_set g c) (l: computation g q) : Prop
 :=
   forall (i:nat)
@@ -202,7 +235,8 @@ Definition outcomes (g:CGS) (q:State) (c:coalition) (ss:strategy_set g c) (l: co
     g.(d) (nth i (proj1_sig l) q) m = (nth (i+1) (proj1_sig l) q).
 
 
-Inductive sentence : Type :=
+(* Inductive type of a sentence in ATL. *)
+Inductive sentence : Set :=
 | obs : Observable -> sentence
 | lnot : sentence -> sentence
 | land : sentence -> sentence -> sentence
@@ -212,7 +246,7 @@ Inductive sentence : Type :=
 | possible_always : coalition -> sentence -> sentence
 | possible_until : coalition -> sentence -> sentence -> sentence.
 
-
+(* Notation for ATl sentences. *)
 Notation "p //\\ q" := (land p q) (at level 30).
 Notation "p \\// q" := (lor p q) (at level 30).
 Notation "!! p" := (lnot p)  (at level 30).
