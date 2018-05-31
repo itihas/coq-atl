@@ -315,8 +315,9 @@ Fixpoint verifies (g:CGS) (q:State) (phi:sentence) :Prop :=
                   exists (n:nat),
                     (verifies g (nth n (proj1_sig l) q) a)
   | <<c>># a => exists (ss:strategy_set g c),
-                forall (l:computation g q) (n:nat),
+                forall (l:computation g q),
                   outcomes g q c ss l ->
+                  forall (n:nat),
                   (verifies g (nth n (proj1_sig l) q) a)
   | <<c>> a %% b => exists (ss:strategy_set g c),
                     forall (l:computation g q),
@@ -369,15 +370,17 @@ Proof.
     }
     pose (l := (exist (computation_property g q) (q::nil) P) : (computation g q)).
     exists l.
-    apply ex_not_not_all.
-    exists 0. unfold not. intros. apply H0.
-    - 
+    unfold not. intros. 
+    assert (outcomes g q (coal_comp c) n l).
+    {
       unfold outcomes. intros. inversion H3. inversion H5.
-    - destruct H, (H l).
-      unfold outcomes. intros. inversion H3. inversion H5.
-      induction x0.
-      * apply H1.
-      * assert (forall m:nat, nth (S m) (proj1_sig l) q = nth m (proj1_sig l) q).
+    }
+    destruct (H0 H1 0).
+    destruct H, (H l).
+    unfold outcomes. intros. inversion H4. inversion H6.
+    induction x0.
+    + apply H2.
+    + assert (forall m:nat, nth (S m) (proj1_sig l) q = nth m (proj1_sig l) q).
         {
           intros. induction m.
           - reflexivity.
@@ -387,13 +390,20 @@ Proof.
               - reflexivity.
               - apply le_S. apply IHm0.
             }
-            apply H2.
+            apply H3.
         }
-        rewrite H2 in H1. apply IHx0 in H1. apply H1.
+        rewrite H3 in H2. apply IHx0 in H2. apply H2.
   }
   assert (B : verifies g q (!! ([[c]]# (!! phi))) -> verifies g q  (<<c>>^ phi)).
   {
     simpl. intros.
+    pose proof (not_ex_all_not (strategy_set g (coal_comp c)) _ H (ss_nothing g (coal_comp c))). simpl in H0.
+    apply not_all_ex_not in H0. destruct H0.
+    apply imply_to_and in H0. destruct H0.
+    apply not_all_ex_not in H1. destruct H1. apply NNPP in H1.
+    exists (ss_nothing g c). intros. exists x0.
+    
+    
     Admitted.        
   (* } *)
 
