@@ -171,7 +171,7 @@ Definition computation_prefix
            : computation g q
 :=
   @exist (list State)
-         (fun l => computation_property g q l)
+         (computation_property g q)(* (fun l => computation_property g q l) *)
          (firstn (S n) (proj1_sig l))
          (computation_property_prefix g n q l).
 
@@ -255,10 +255,10 @@ Notation "<< c >>o p" := (possible_next c p) (at level 50).
 Notation "<< c >>^ p" := (possible_once c  p) (at level 50).
 Notation "<< c >># p" := (possible_always c p) (at level 50).
 Notation "<< c >> p %% q" := (possible_until c p q) (at level 50).
-Notation "[[ c ]]o p" := (possible_next (fun p0:Player => ~(c p0)) p) (at level 50).
-Notation "[[ c ]]^ p" := (possible_once (coal_comp c) p) (at level 50).
-Notation "[[ c ]]# p" := (possible_always (coal_comp c) p) (at level 50).
-Notation "[[ c ]] p %% q" := (possible_until (coal_comp c) p  q) (at level 50).
+Notation "[[ c ]]o p" := (lnot (possible_next (lnot p))) (at level 50).
+Notation "[[ c ]]^ p" := (lnot (possible_always c (lnot p))) (at level 50).
+Notation "[[ c ]]# p" := (lnot (possible_once c (lnot p)))  (at level 50).
+Notation "[[ c ]] p %% q" := (lnot (possible_until (lnot p) q)) (at level 50).
 
 Check forall  (g:CGS) (q:State) (c: coalition),
     exists (ss:strategy_set g c),
@@ -353,57 +353,60 @@ Qed.
   
 Axiom d_sentence : forall (g:CGS) (q:State) (phi:sentence), decidable (verifies g q phi).
 
-Theorem coalition_complement_once_always : forall (g:CGS) (q:State) (phi:sentence) (c:coalition),
+Theorem once_not_always_not : forall (g:CGS) (q:State) (phi:sentence) (c:coalition),
     verifies g q  (<<c>>^ phi) <-> verifies g q (!! ([[c]]# (!! phi))).
 Proof.
-  intros.
-  assert (F:verifies g q  (<<c>>^ phi) -> verifies g q (!! ([[c]]# (!! phi)))).
-  { simpl. intros.
-    apply all_not_not_ex.
-    intros.
-    apply ex_not_not_all.
+  intros. split.
+  - assert (forall P:Prop, P -> ~~P).
+    {
+      intros. unfold not. intros. apply H0 in H. apply H.
+    }
+    simpl. intros. apply H.
+    destruct H0. exists x. intros. apply H0 in H1. destruct H1. exists x0.
+    apply H. apply H1.
+  - simpl. intros. apply NNPP in H. destruct H. exists x. intros.
+    apply H in H0. destruct H0. exists x0.
+    apply NNPP in H0. apply H0.
+    
+Qed.
+
+
+Theorem coalition_complement_once_always : forall (g:CGS) (q:State) (phi:sentence) (c:coalition),
+    verifies g q (<<c>>^ phi) <-> verifies g q (!! [[(coal_comp c)]]^ phi).
+Proof.
+  intros. split.
+  assert (F: verifies g q (<<c>>^ phi) -> verifies g q (!! <<(coal_comp c)>># (!! phi))).
+  {
+    simpl. intros. apply all_not_not_ex. intros. apply ex_not_not_all.
     assert (P: computation_property g q (q::nil)).
     {
-      unfold computation_property. split. 
+      unfold computation_property. split.
       - reflexivity.
-      - reflexivity.
+      - unfold computation_property_fix. simpl. apply I.
     }
-    pose (l := (exist (computation_property g q) (q::nil) P) : (computation g q)).
+    pose (l:=@exist (list State) (computation_property g q) (q::nil) P: computation g q).
     exists l.
-    unfold not. intros. 
+    unfold not. intros.
+    destruct H. pose proof (H l).
+    assert (outcomes g q c x l).
+    {
+      unfold outcomes. intros. inversion H4. inversion H6.
+    }
+    apply H1 in H2. destruct H2.
     assert (outcomes g q (coal_comp c) n l).
     {
-      unfold outcomes. intros. inversion H3. inversion H5.
+      unfold outcomes. intros. inversion H5. inversion H7.
     }
-    destruct (H0 H1 0).
-    destruct H, (H l).
-    unfold outcomes. intros. inversion H4. inversion H6.
-    induction x0.
-    + apply H2.
-    + assert (forall m:nat, nth (S m) (proj1_sig l) q = nth m (proj1_sig l) q).
-        {
-          intros. induction m.
-          - reflexivity.
-          - symmetry. apply nth_overflow. simpl. assert (forall m, 1 <= S m).
-            {
-              intros. induction m0.
-              - reflexivity.
-              - apply le_S. apply IHm0.
-            }
-            apply H3.
-        }
-        rewrite H3 in H2. apply IHx0 in H2. apply H2.
+    pose proof (H0 H3 x0).
+    apply H4 in H2. apply H2.
   }
-  assert (B : verifies g q (!! ([[c]]# (!! phi))) -> verifies g q  (<<c>>^ phi)).
+  assert (B: verifies g q (!! <<(coal_comp c)>># (!! phi)) -> verifies g q (<<c>>^ phi)).
   {
     simpl. intros.
-    pose proof (not_ex_all_not (strategy_set g (coal_comp c)) _ H (ss_nothing g (coal_comp c))). simpl in H0.
-    apply not_all_ex_not in H0. destruct H0.
-    apply imply_to_and in H0. destruct H0.
-    apply not_all_ex_not in H1. destruct H1. apply NNPP in H1.
-    exists (ss_nothing g c). intros. exists x0.
+    pose proof (not_ex_all_not (strategy_set g (coal_comp c)) _ H (ss_nothing g (coal_comp c))).
+    simpl in H0.
+    apply not_all_ex_not in H0. destruct H0. apply imply_to_and in H0. destruct H0.
+    apply not_all_ex_not in H1. destruct H1.
+    apply NNPP in H1.    
     
-    
-    Admitted.        
-  (* } *)
-
+  }
