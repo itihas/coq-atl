@@ -188,12 +188,15 @@ Check computation_prefix.
 
 (* There is always a move available called [nothing], which if performed by every player fails to change state. *)
 Parameter nothing: Move.
-Parameter nothing_does_nothing : forall (g:CGS) (q:State), g.(d) q (fun _ => nothing) = q.
+Axiom nothing_always_enabled : forall (g:CGS) (q:State) (p:Player), g.(e) q p nothing = true.
+Axiom nothing_does_nothing : forall (g:CGS) (q:State), g.(d) q (fun _ => nothing) = q.
 
 
 (* A strategy is a function from computations to moves, representing what a player would do in a particular play-through. *)
-Definition strategy (g:CGS) (p:Player) : Set := forall (q:State) (l:computation g q), Move.
-Definition strat_nothing (g: CGS) (p:Player) : strategy g p := fun _ _ => nothing.
+Definition strategy (g:CGS) (p:Player) : Set := forall (q:State) (l:computation g q), {m:Move | g.(e) q p m = true}.
+
+Definition strat_nothing (g: CGS) (p:Player) : strategy g p :=
+  fun q _ => exist (fun m => g.(e) q p m = true) nothing (nothing_always_enabled g q p).
 
 (* A coalition is a set of players. *)
 Definition coalition : Set := Player -> bool.
@@ -224,7 +227,7 @@ Definition strategy_set (g:CGS) (c:coalition) : Set := forall (p:Player), c p = 
 (* Whether a particular move vector obeys a given strategy set. *)
 Definition strategy_set_enabled (g:CGS) (c:coalition) (ss:strategy_set g c) (q:State) (l:computation g q) (mv:move_vec q) :=
   forall (p:Player) (H:c p = true),
-    mv p = ss p H q l.
+    mv p = proj1_sig (ss p H q l).
   
 (* Strategy set where members of the coalition do nothing. *)
 Definition ss_nothing (g:CGS) (c:coalition) : strategy_set g c := fun p _ => strat_nothing g p.
@@ -240,7 +243,7 @@ Definition outcomes (g:CGS) (q:State) (c:coalition) (ss:strategy_set g c) (l: co
            (p:Player)
            (H: c p = true),
     let x := computation_prefix g q l i in
-    m p = ss p H q x ->
+    m p = proj1_sig (ss p H q x) ->
     g.(d) (nth i (proj1_sig l) q) m = (nth (S i) (proj1_sig l) q).
 
 
@@ -265,10 +268,10 @@ Notation "<< c >>o p" := (possible_next c p) (at level 50).
 Notation "<< c >>^ p" := (possible_once c  p) (at level 50).
 Notation "<< c >># p" := (possible_always c p) (at level 50).
 Notation "<< c >> p %% q" := (possible_until c p q) (at level 50).
-Notation "[[ c ]]o p" := (lnot (possible_next (lnot p))) (at level 50).
+Notation "[[ c ]]o p" := (lnot (possible_next c (lnot p))) (at level 50).
 Notation "[[ c ]]^ p" := (lnot (possible_always c (lnot p))) (at level 50).
 Notation "[[ c ]]# p" := (lnot (possible_once c (lnot p)))  (at level 50).
-Notation "[[ c ]] p %% q" := (lnot (possible_until (lnot p) q)) (at level 50).
+Notation "[[ c ]] p %% q" := (lnot (possible_until c (lnot q) p)) (at level 50).
 
 Check forall  (g:CGS) (q:State) (c: coalition),
     exists (ss:strategy_set g c),
@@ -452,8 +455,17 @@ Proof.
         apply le_S_n. apply H0.
 Qed.
 
-
-Theorem coalition_complement_once_always : forall (g:CGS) (q:State) (phi:sentence) (c:coalition),
-    verifies g q (<<c>>^ phi) <-> verifies g q ([[(coal_comp c)]]^ phi).
+Theorem coalition_complement_next : forall (g:CGS) (q:State) (phi:sentence) (c:coalition),
+    verifies g q (<<c>>o phi) <-> verifies g q ([[coal_comp c]]o phi).
 Proof.
-  Admitted.
+Admitted.
+  
+Theorem coalition_complement_once_always : forall (g:CGS) (q:State) (phi:sentence) (c:coalition),
+    verifies g q (<<c>>^ phi) <-> verifies g q ([[coal_comp c]]^ phi).
+Proof.
+Admitted.
+
+Theorem coalition_complement_until : forall (g:CGS) (q:State) (phi psi:sentence) (c:coalition),
+    verifies g q (<<c>> phi %% psi) <-> verifies g q ([[coal_comp c]] phi %% psi).
+Proof.
+Admitted.
