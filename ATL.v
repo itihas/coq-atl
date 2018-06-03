@@ -4,10 +4,18 @@ Require Export Classical.
 Require Export Decidable.
 Require Export FunctionalExtensionality.
 
+Require Import Coq.Lists.List Coq.Bool.Bool.
+
+Import Coq.Lists.List.ListNotations.
+
+Scheme Equality for list.
+
 Parameter State : Set.
 Parameter Player : Set.
 Parameter Observable : Set.     (* set of atomic truths that can hold at a given state. *)
-Parameter Move : Set.           (* alphabet of moves individual players can make. *)
+Parameter Move : Set.           (* alphabet of moves individual players can make. 
+*)
+Parameter beq_state : State -> State -> bool.
 Parameter beq_player : Player -> Player -> bool.
 
 (* type corresponding to the set of moves each player makes. *)
@@ -60,7 +68,7 @@ Definition computation_property (g:CGS) (q:State) (l:list State) : Prop :=
 Definition computation (g:CGS) (q:State) : Set := {l:list State | @computation_property g q l}.
 
 (* If a [list State] is a [q]-computation, that same [list State] cons'ed with State [a] is an [a]-computation. *)
-Theorem computation_property_suffix :
+Theorem computation_property_cons :
   forall (g:CGS) (l:list State) (q a b:State),
     computation_property g q (b::l) /\ succ g a b -> computation_property g a (a::b::l).
 Proof.
@@ -222,17 +230,19 @@ Definition strategy_set_enabled (g:CGS) (c:coalition) (ss:strategy_set g c) (q:S
 Definition ss_nothing (g:CGS) (c:coalition) : strategy_set g c := fun p _ => strat_nothing g p.
 
 
+
 (* Property checking whether a given computation obeys a strategy set in all successive states. *)
 Definition outcomes (g:CGS) (q:State) (c:coalition) (ss:strategy_set g c) (l: computation g q) : Prop
 :=
-  forall (i:nat)
-         (p:Player)
-         (H: c p = true)
-         (m:move_vec (nth i (proj1_sig l) q)),
+  forall (i:nat),
+    S i  < (length (proj1_sig l)) ->
+    forall (m:move_vec (nth i (proj1_sig l) q))
+           (p:Player)
+           (H: c p = true),
     let x := computation_prefix g q l i in
     m p = ss p H q x ->
-    S i  < (length (proj1_sig l)) ->
-    g.(d) (nth i (proj1_sig l) q) m = (nth (i+1) (proj1_sig l) q).
+    g.(d) (nth i (proj1_sig l) q) m = (nth (S i) (proj1_sig l) q).
+
 
 
 (* Inductive type of a sentence in ATL. *)
@@ -318,7 +328,7 @@ Fixpoint verifies (g:CGS) (q:State) (phi:sentence) :Prop :=
                 forall (l:computation g q),
                   outcomes g q c ss l ->
                   forall (n:nat),
-                  (verifies g (nth n (proj1_sig l) q) a)
+                    (verifies g (nth n (proj1_sig l) q) a)
   | <<c>> a %% b => exists (ss:strategy_set g c),
                     forall (l:computation g q),
                       outcomes g q c ss l ->
@@ -371,42 +381,79 @@ Proof.
 Qed.
 
 
-Theorem coalition_complement_once_always : forall (g:CGS) (q:State) (phi:sentence) (c:coalition),
-    verifies g q (<<c>>^ phi) <-> verifies g q (!! [[(coal_comp c)]]^ phi).
+Theorem computation_property_q : forall (g:CGS) (q:State),
+    computation_property g q (q::nil).
 Proof.
-  intros. split.
-  assert (F: verifies g q (<<c>>^ phi) -> verifies g q (!! <<(coal_comp c)>># (!! phi))).
-  {
-    simpl. intros. apply all_not_not_ex. intros. apply ex_not_not_all.
-    assert (P: computation_property g q (q::nil)).
+  unfold computation_property. split.
+  - reflexivity.
+  - unfold computation_property_fix. simpl. apply I.
+Qed.
+
+Definition computation_q (g:CGS) (q:State) : computation g q := @exist (list State) (computation_property g q) (q::nil) (computation_property_q g q).
+
+Theorem nth_computation_q : forall (g:CGS) (q:State) (n:nat),
+    let l := computation_q g q in
+    (nth n (proj1_sig l) q) = q.
+Proof.
+  intros. unfold computation_q in l. unfold l.
+    unfold proj1_sig. assert (forall n, length (q::nil) <= (S n)).
     {
-      unfold computation_property. split.
+      simpl. induction n0.
       - reflexivity.
-      - unfold computation_property_fix. simpl. apply I.
+      - apply le_S. apply  IHn0.
     }
-    pose (l:=@exist (list State) (computation_property g q) (q::nil) P: computation g q).
-    exists l.
-    unfold not. intros.
-    destruct H. pose proof (H l).
-    assert (outcomes g q c x l).
-    {
-      unfold outcomes. intros. inversion H4. inversion H6.
-    }
-    apply H1 in H2. destruct H2.
-    assert (outcomes g q (coal_comp c) n l).
-    {
-      unfold outcomes. intros. inversion H5. inversion H7.
-    }
-    pose proof (H0 H3 x0).
-    apply H4 in H2. apply H2.
-  }
-  assert (B: verifies g q (!! <<(coal_comp c)>># (!! phi)) -> verifies g q (<<c>>^ phi)).
-  {
-    simpl. intros.
-    pose proof (not_ex_all_not (strategy_set g (coal_comp c)) _ H (ss_nothing g (coal_comp c))).
-    simpl in H0.
-    apply not_all_ex_not in H0. destruct H0. apply imply_to_and in H0. destruct H0.
-    apply not_all_ex_not in H1. destruct H1.
-    apply NNPP in H1.    
-    
-  }
+    induction n.
+  - reflexivity.
+  - pose proof (H n). pose proof (nth_overflow _ q H0). apply H1.
+Qed.
+
+Theorem zeroth_computation_is_q : forall (g:CGS) (q:State) (l: computation g q),
+    (nth 0 (proj1_sig l) q) = q.
+Proof.
+  intros. destruct l. unfold computation_property in c. destruct c.
+  simpl. induction x.
+  - inversion e0.
+  - inversion e0. reflexivity.
+Qed.
+
+Axiom computation_eq : forall (g:CGS) (q:State) (l1 l2:computation g q),
+    l1 = l2 <-> (proj1_sig l1) = (proj1_sig l2).
+
+Theorem ith_succ : (forall (g:CGS) (q:State) (l:list State) (i:nat), computation_property g q l -> S i < length l -> succ g (nth i l q) (nth (S i) l q)).
+Proof.
+  intros. generalize dependent i. generalize dependent q.
+  induction l.
+  - intros. inversion H0.
+  - destruct l.
+    + intros. inversion H0. inversion H2.
+    + intros. inversion H. inversion H2.
+      assert (hd_error (s::l) = Some s).
+      {
+        reflexivity.
+      }
+      assert (computation_property g s (s::l)).
+      {
+        unfold computation_property. split.
+        - apply H5.
+        - apply H4.
+      }
+      pose proof (IHl s H6).
+      assert (forall (i:nat) (a b:State) (l:list State), nth i l b = nth (S i) (a::l) b).
+      {
+        intros. destruct l0.
+        - reflexivity.
+        - reflexivity.
+      }
+      rewrite (nth_indep _ _ s H0).
+      pose proof (Le.le_Sn_le _ _ H0). rewrite (nth_indep _ _ s H9).
+      induction i.
+      * simpl. apply H3.
+      * rewrite <- H8. rewrite <- H8. apply H7. simpl. simpl in H0.
+        apply le_S_n. apply H0.
+Qed.
+
+
+Theorem coalition_complement_once_always : forall (g:CGS) (q:State) (phi:sentence) (c:coalition),
+    verifies g q (<<c>>^ phi) <-> verifies g q ([[(coal_comp c)]]^ phi).
+Proof.
+  Admitted.
