@@ -1,5 +1,6 @@
 -R . Lib
 NonEmpty.v
+CGS.v
 ATL.v
 VNM.v
 test.v
