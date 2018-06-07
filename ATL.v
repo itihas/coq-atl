@@ -25,43 +25,6 @@ Notation "[[ c ]]^ p" := (lnot (possible_always c (lnot p))) (at level 50).
 Notation "[[ c ]]# p" := (lnot (possible_once c (lnot p)))  (at level 50).
 Notation "[[ c ]] p %% q" := (lnot (possible_until c (lnot q) p)) (at level 50).
 
-Check forall  (g:CGS) (q:State) (c: coalition),
-    exists (ss:strategy_set g c),
-      forall (l:nonempty State),
-        outcomes g c ss l.
-
-(* Variable not_helper : CGS -> State -> sentence -> Prop. *)
-
-(* Inductive verifiesI: CGS -> State -> sentence -> Prop := *)
-(* | verifiesObs: forall (g: CGS) (q: State) (a: Observable), *)
-(*     g.(o) q = a -> verifiesI g q (obs a) *)
-(* | verifiesNot: forall (g: CGS) (q: State) (phi: sentence), *)
-(*     (verifiesI g q phi -> False) -> *)
-(*     verifiesI g q (!! phi) *)
-(* | verifiesAnd: forall (g: CGS) (q: State) (phi1 phi2: sentence), *)
-(*     verifiesI g q phi1 -> *)
-(*     verifiesI g q phi2 -> *)
-(*     verifiesI g q (phi1 //\\ phi2) *)
-(* | verifiesPossibleNext: forall (g: CGS) (q: State) (phi: sentence) (c:coalition), *)
-(*     (exists (ss:strategy_set g c), *)
-(*       forall (l:computation g q), *)
-(*         outcomes g q c ss l -> *)
-(*         verifiesI g (nth 1 (proj1_sig l) q) phi) -> *)
-(*     verifiesI g q (<<c>>o phi) *)
-(* | verifiesPossibleOnce: forall (g: CGS) (q: State) (phi: sentence) (c:coalition), *)
-(*     (exists (ss:strategy_set g c), *)
-(*         forall (l:computation g q), *)
-(*           outcomes g q c ss l -> *)
-(*           (exists n:nat, verifiesI g (nth n (proj1_sig l) q) phi)) -> *)
-(*     verifiesI g q (<<c>>^ phi) *)
-(* | verifiesPossibleAlways: forall (g: CGS) (q: State) (phi: sentence) (c:coalition), *)
-(*     (exists (ss:strategy_set g c), *)
-(*         forall (l:computation g q), *)
-(*           outcomes g q c ss l -> *)
-(*           (forall n:nat, verifiesI g (nth n (proj1_sig l) q) phi)) -> *)
-(*     verifiesI g q (<<c>>^ phi). *)
- 
-
     
     
 Fixpoint verifies (g:CGS) (q:State) (phi:sentence) : Prop :=
@@ -71,26 +34,26 @@ Fixpoint verifies (g:CGS) (q:State) (phi:sentence) : Prop :=
   | a //\\ b => (verifies g q a) /\ (verifies g q b)
   | a \\// b => (verifies g q a) \/ (verifies g q b)
   | <<c>>o a => exists (ss:strategy_set g c),
-                forall (l:nonempty State) (CPL: computation_property g q l),
+                forall (l:Stream State) (CPL: computation_property g q l),
                   outcomes g c ss l ->
-                  (verifies g (nonempty_nth 1 l q) a)
+                  (verifies g (Str_nth 1 l) a)
   | <<c>>^ a => exists (ss:strategy_set g c),
-                forall (l:nonempty State) (CPL:computation_property g q l),
+                forall (l:Stream State) (CPL:computation_property g q l),
                   outcomes g c ss l ->
                   exists (n:nat),
-                    (verifies g (nonempty_nth n l q) a)
+                    (verifies g (Str_nth n l) a)
   | <<c>># a => exists (ss:strategy_set g c),
-                forall (l:nonempty State) (CPL:computation_property g q l),
+                forall (l:Stream State) (CPL:computation_property g q l),
                   outcomes g c ss l ->
                   forall (n:nat),
-                    (verifies g (nonempty_nth n l q) a)
+                    (verifies g (Str_nth n l) a)
   | <<c>> a %% b => exists (ss:strategy_set g c),
-                forall (l:nonempty State) (CPL:computation_property g q l),
+                forall (l:Stream State) (CPL:computation_property g q l),
                       outcomes g c ss l ->
                       exists (n:nat),
-                        ((verifies g (nonempty_nth n l q) b)
+                        ((verifies g (Str_nth n l) b)
                          /\ forall (m:nat),
-                            m < n -> (verifies g (nonempty_nth m l q) a))
+                            m < n -> (verifies g (Str_nth m l) a))
   end.
 (* TODO write tactic to step through the fixpoint.
 
@@ -149,13 +112,6 @@ Proof.
     apply NNPP in H0. apply H0. apply CPL.
 Qed.
 
-
-Theorem computation_property_q : forall (g:CGS) (q:State),
-    computation_property g q (q:::nil).
-Proof.
-  intros.
-  apply computation_property_one.
-Qed.
 
 Theorem coalition_complement_next : forall (g:CGS) (q:State) (phi:sentence) (c:coalition),
     verifies g q (<<c>>o phi) <-> verifies g q ([[coal_comp c]]o phi).
